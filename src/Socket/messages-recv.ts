@@ -821,8 +821,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
           await upsertMessage(msg, node.attrs.offline ? "append" : "notify");
         })
       ]);
-    } catch (err) {
-      logger.error({ err, node }, "error in handling message");
+    } finally {
+      await sendMessageAck(node);
     }
   };
 
