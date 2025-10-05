@@ -15,7 +15,13 @@ import {
   WAMessage,
   WAPatchCreate,
   WAPatchName,
-  WAPresence
+  WAPresence,
+  WAPrivacyCallValue,
+  WAPrivacyGroupAddValue,
+  WAPrivacyMessagesValue,
+  WAPrivacyOnlineValue,
+  WAPrivacyValue,
+  WAReadReceiptsValue
 } from "../Types";
 import {
   chatModificationToAppPatch,
@@ -92,6 +98,62 @@ export const makeChatsSocket = (config: SocketConfig) => {
     }
 
     return privacySettings;
+  };
+
+  /** helper function to run a privacy IQ query */
+  const privacyQuery = async (name: string, value: string) => {
+    await query({
+      tag: "iq",
+      attrs: {
+        xmlns: "privacy",
+        to: S_WHATSAPP_NET,
+        type: "set"
+      },
+      content: [
+        {
+          tag: "privacy",
+          attrs: {},
+          content: [
+            {
+              tag: "category",
+              attrs: { name, value }
+            }
+          ]
+        }
+      ]
+    });
+  };
+
+  const updateMessagesPrivacy = async (value: WAPrivacyMessagesValue) => {
+    await privacyQuery("messages", value);
+  };
+
+  const updateCallPrivacy = async (value: WAPrivacyCallValue) => {
+    await privacyQuery("calladd", value);
+  };
+
+  const updateLastSeenPrivacy = async (value: WAPrivacyValue) => {
+    await privacyQuery("last", value);
+  };
+
+  const updateOnlinePrivacy = async (value: WAPrivacyOnlineValue) => {
+    await privacyQuery("online", value);
+  };
+
+  const updateProfilePicturePrivacy = async (value: WAPrivacyValue) => {
+    await privacyQuery("profile", value);
+  };
+
+  const updateStatusPrivacy = async (value: WAPrivacyValue) => {
+    await privacyQuery("status", value);
+  };
+
+  const updateReadReceiptsPrivacy = async (value: WAReadReceiptsValue) => {
+    await privacyQuery("readreceipts", value);
+  };
+
+  const updateGroupsAddPrivacy = async (value: WAPrivacyGroupAddValue) => {
+    await privacyQuery("groupadd", value);
   };
 
   /** helper function to run a generic IQ query */
@@ -185,13 +247,20 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
   /** update the profile picture for yourself or a group */
   const updateProfilePicture = async (jid: string, content: WAMediaUpload) => {
+    const targetJid =
+      jidNormalizedUser(jid) !== jidNormalizedUser(authState.creds.me!.id)
+        ? jidNormalizedUser(jid)
+        : undefined;
+
     const { img } = await generateProfilePicture(content);
+
     await query({
       tag: "iq",
       attrs: {
-        to: jidNormalizedUser(jid),
+        to: S_WHATSAPP_NET,
         type: "set",
-        xmlns: "w:profile:picture"
+        xmlns: "w:profile:picture",
+        ...(targetJid ? { target: targetJid } : {})
       },
       content: [
         {
@@ -819,7 +888,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
           creds: authState.creds,
           keyStore: authState.keys,
           logger,
-          options: config.options
+          options: config.options,
+          config
         })
       ]);
     }
@@ -876,6 +946,14 @@ export const makeChatsSocket = (config: SocketConfig) => {
     onWhatsApp,
     fetchBlocklist,
     fetchStatus,
+    updateCallPrivacy,
+    updateMessagesPrivacy,
+    updateLastSeenPrivacy,
+    updateOnlinePrivacy,
+    updateProfilePicturePrivacy,
+    updateStatusPrivacy,
+    updateReadReceiptsPrivacy,
+    updateGroupsAddPrivacy,
     updateProfilePicture,
     updateProfileStatus,
     updateProfileName,

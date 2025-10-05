@@ -4,6 +4,7 @@ import { proto } from "../../WAProto";
 import { WA_DEFAULT_EPHEMERAL } from "../Defaults";
 import {
   AnyMessageContent,
+  GroupMetadata,
   MediaConnInfo,
   MessageReceiptType,
   MessageRelayOptions,
@@ -74,6 +75,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
       stdTTL: 300, // 5 minutes
       useClones: false
     });
+
+  const groupMetadataCache = config.groupMetadataCache;
 
   let mediaConn: Promise<MediaConnInfo>;
   const refreshMediaConn = async (forceGet = false) => {
@@ -386,14 +389,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
       participant,
       additionalAttributes,
       useUserDevicesCache,
-      cachedGroupMetadata,
       statusJidList
     }: MessageRelayOptions
   ) => {
     const meId = authState.creds.me!.id;
     const meLid = authState.creds.me!.lid;
+    const isRetryResend = Boolean(participant?.jid);
 
-    let shouldIncludeDeviceIdentity = false;
+    let shouldIncludeDeviceIdentity = isRetryResend;
 
     const { user, server } = jidDecode(jid)!;
     const statusJid = "status@broadcast";
@@ -433,9 +436,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
       if (isGroup || isStatus) {
         const [groupData, senderKeyMap] = await Promise.all([
           (async () => {
-            let groupData = cachedGroupMetadata
-              ? await cachedGroupMetadata(jid)
-              : undefined;
+            let groupData = groupMetadataCache?.get(jid) as
+              | GroupMetadata
+              | undefined;
             if (groupData && Array.isArray(groupData?.participants)) {
               logger.trace(
                 { jid, participants: groupData.participants.length },
@@ -445,6 +448,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
             if (!groupData && !isStatus) {
               groupData = await groupMetadata(jid);
+              groupMetadataCache?.set(jid, groupData);
             }
 
             return groupData;
@@ -466,10 +470,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
             ? groupData.participants.map(p => p.id)
             : [];
 
-          if (!isStatus) {
+          if (groupData?.ephemeralDuration) {
             additionalAttributes = {
               ...additionalAttributes,
-              addressing_mode: groupData?.addressingMode || "pn"
+              expiration: groupData.ephemeralDuration.toString()
             };
           }
 
@@ -483,6 +487,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
             false
           );
           devices.push(...additionalDevices);
+        }
+
+        if (isGroup) {
+          additionalAttributes = {
+            ...additionalAttributes,
+            addressing_mode: groupData?.addressingMode || "pn"
+          };
         }
 
         const { ciphertext, senderKeyDistributionMessageKey } =
@@ -501,7 +512,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
             groupData?.addressingMode === "lid" ? "lid" : "s.whatsapp.net",
             device
           );
-          if (!senderKeyMap[jid] || !!participant) {
+          if (!senderKeyMap[jid] && !isRetryResend) {
             senderKeyJids.push(jid);
             // store that this person has had the sender keys sent to them
             senderKeyMap[jid] = true;
@@ -533,15 +544,30 @@ export const makeMessagesSocket = (config: SocketConfig) => {
           participants.push(...result.nodes);
         }
 
-        binaryNodeContent.push({
-          tag: "enc",
-          attrs: { v: "2", type: "skmsg" },
-          content: ciphertext
-        });
+        if (isRetryResend) {
+          const { type, ciphertext: encryptedContent } =
+            await encryptSignalProto(participant!.jid, encodedMsg, authState);
 
-        await authState.keys.set({
-          "sender-key-memory": { [jid]: senderKeyMap }
-        });
+          binaryNodeContent.push({
+            tag: "enc",
+            attrs: {
+              v: "2",
+              type,
+              count: participant!.count.toString()
+            },
+            content: encryptedContent
+          });
+        } else {
+          binaryNodeContent.push({
+            tag: "enc",
+            attrs: { v: "2", type: "skmsg" },
+            content: ciphertext
+          });
+
+          await authState.keys.set({
+            "sender-key-memory": { [jid]: senderKeyMap }
+          });
+        }
       } else {
         const { user: meUser } = jidDecode(meId)!;
         const { user: meLidUser } = jidDecode(meLid)!;
@@ -836,9 +862,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
         fullMsg.message = patchMessageForMdIfRequired(fullMsg.message!);
         await relayMessage(jid, fullMsg.message!, {
           messageId: fullMsg.key.id!,
-          cachedGroupMetadata: options.cachedGroupMetadata,
           additionalAttributes
         });
+
+        config.sentMessagesCache?.set(fullMsg.key.id!, fullMsg.message);
+
         if (config.emitOwnEvents) {
           process.nextTick(() => {
             upsertMessage(fullMsg, "append");

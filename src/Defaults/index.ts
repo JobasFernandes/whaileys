@@ -1,3 +1,4 @@
+import NodeCache from "node-cache";
 import { proto } from "../../WAProto";
 import type { MediaType, SocketConfig } from "../Types";
 import { Browsers } from "../Utils";
@@ -12,6 +13,12 @@ export const DEF_TAG_PREFIX = "TAG:";
 export const PHONE_CONNECTION_CB = "CB:Pong";
 
 export const WA_DEFAULT_EPHEMERAL = 7 * 24 * 60 * 60;
+
+export const DEFAULT_CACHE_TTLS = {
+  SIGNAL_STORE: 5 * 60, // 5 minutes
+  GROUP_METADATA: 15 * 60, // 15 minutes
+  SENT_MESSAGES: 20 // 20 seconds
+};
 
 export const NOISE_MODE = "Noise_XX_25519_AESGCM_SHA256\0\0\0\0";
 export const DICT_VERSION = 2;
@@ -56,7 +63,15 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
   transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
   generateHighQualityLinkPreview: false,
   options: {},
-  getMessage: async () => undefined
+  getMessage: async () => undefined,
+  groupMetadataCache: new NodeCache({
+    stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA,
+    useClones: false
+  }),
+  sentMessagesCache: new NodeCache({
+    stdTTL: DEFAULT_CACHE_TTLS.SENT_MESSAGES,
+    useClones: false
+  })
 };
 
 export const MEDIA_PATH_MAP: { [T in MediaType]?: string } = {
@@ -95,10 +110,3 @@ export const MEDIA_KEYS = Object.keys(MEDIA_PATH_MAP) as MediaType[];
 export const MIN_PREKEY_COUNT = 5;
 
 export const INITIAL_PREKEY_COUNT = 30;
-
-export const DEFAULT_CACHE_TTLS = {
-  SIGNAL_STORE: 5 * 60, // 5 minutes
-  MSG_RETRY: 60 * 60, // 1 hour
-  CALL_OFFER: 5 * 60, // 5 minutes
-  USER_DEVICES: 5 * 60 // 5 minutes
-};

@@ -8,6 +8,8 @@ import {
   GroupMetadata,
   ParticipantAction,
   SignalKeyStoreWithTransaction,
+  SocketConfig,
+  WAMessage,
   WAMessageStubType
 } from "../Types";
 import {
@@ -15,7 +17,7 @@ import {
   normalizeMessageContent,
   toNumber
 } from "../Utils";
-import { areJidsSameUser, jidNormalizedUser } from "../WABinary";
+import { areJidsSameUser, isJidGroup, jidNormalizedUser } from "../WABinary";
 
 type ProcessMessageContext = {
   shouldProcessHistoryMsg: boolean;
@@ -24,6 +26,7 @@ type ProcessMessageContext = {
   ev: BaileysEventEmitter;
   logger?: Logger;
   options: AxiosRequestConfig<any>;
+  config: SocketConfig;
 };
 
 const MSG_MISSED_CALL_TYPES = new Set([
@@ -75,15 +78,57 @@ export const isRealMessage = (message: proto.IWebMessageInfo) => {
 export const shouldIncrementChatUnread = (message: proto.IWebMessageInfo) =>
   !message.key.fromMe && !message.messageStubType;
 
+const updateGroupMetadata = (
+  groupMetadata: GroupMetadata,
+  action: ParticipantAction,
+  participants: string[]
+): GroupMetadata => {
+  const findParticipant = (id: string) =>
+    groupMetadata.participants.find(p => areJidsSameUser(p.id, id));
+
+  switch (action) {
+    case "add":
+      participants.forEach(id => {
+        if (!findParticipant(id)) {
+          groupMetadata.participants.push({ id, admin: null });
+        }
+      });
+      break;
+
+    case "remove":
+      groupMetadata.participants = groupMetadata.participants.filter(
+        p => !participants.includes(p.id)
+      );
+      break;
+
+    case "promote":
+      participants.forEach(id => {
+        const p = findParticipant(id);
+        if (p) p.admin = "admin";
+      });
+      break;
+
+    case "demote":
+      participants.forEach(id => {
+        const p = findParticipant(id);
+        if (p) p.admin = null;
+      });
+      break;
+  }
+
+  return groupMetadata;
+};
+
 const processMessage = async (
-  message: proto.IWebMessageInfo,
+  message: WAMessage,
   {
     shouldProcessHistoryMsg,
     ev,
     creds,
     keyStore,
     logger,
-    options
+    options,
+    config
   }: ProcessMessageContext
 ) => {
   const meId = creds.me!.id;
@@ -201,6 +246,20 @@ const processMessage = async (
           ephemeralSettingTimestamp: toNumber(message.messageTimestamp),
           ephemeralExpiration: protocolMsg.ephemeralExpiration || null
         });
+
+        if (chat.id && isJidGroup(chat.id)) {
+          const groupMetadata = config.groupMetadataCache?.get(chat.id) as
+            | GroupMetadata
+            | undefined;
+
+          if (!groupMetadata) break;
+
+          config.groupMetadataCache?.set(chat.id, {
+            ...groupMetadata,
+            ephemeralDuration: protocolMsg.ephemeralExpiration || null
+          });
+        }
+
         break;
       case proto.Message.ProtocolMessage.Type
         .PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE:
@@ -223,6 +282,18 @@ const processMessage = async (
         }
 
         break;
+      case proto.Message.ProtocolMessage.Type.SHARE_PHONE_NUMBER:
+        ev.emit("chats.phoneNumberShare", {
+          lid: message.key.senderLid!,
+          jid: message.key.senderPn!
+        });
+
+        ev.emit("contacts.phone-number-share", {
+          lid: message.key.senderLid!,
+          jid: message.key.senderPn!
+        });
+
+        break;
     }
   } else if (content?.reactionMessage) {
     const reaction: proto.IReaction = {
@@ -239,10 +310,35 @@ const processMessage = async (
     const jid = message.key!.remoteJid!;
     //let actor = whatsappID (message.participant)
     let participants: string[];
-    const emitParticipantsUpdate = (action: ParticipantAction) =>
+
+    const emitParticipantsUpdate = (action: ParticipantAction) => {
       ev.emit("group-participants.update", { id: jid, participants, action });
+
+      const groupMetadata = config.groupMetadataCache?.get(jid) as
+        | GroupMetadata
+        | undefined;
+
+      if (!groupMetadata) return;
+
+      const updatedMetadata = updateGroupMetadata(
+        groupMetadata,
+        action,
+        participants
+      );
+
+      config.groupMetadataCache?.set(jid, updatedMetadata);
+    };
+
     const emitGroupUpdate = (update: Partial<GroupMetadata>) => {
       ev.emit("groups.update", [{ id: jid, ...update }]);
+
+      const groupMetadata = config.groupMetadataCache?.get(jid) as
+        | GroupMetadata
+        | undefined;
+
+      if (!groupMetadata) return;
+
+      config.groupMetadataCache?.set(jid, { ...groupMetadata, ...update });
     };
 
     const participantsIncludesMe = () =>

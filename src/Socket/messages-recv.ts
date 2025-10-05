@@ -52,7 +52,13 @@ import { makeMessagesSocket } from "./messages-send";
 import { randomBytes } from "crypto";
 
 export const makeMessagesRecvSocket = (config: SocketConfig) => {
-  const { logger, retryRequestDelayMs, getMessage, shouldIgnoreJid } = config;
+  const {
+    logger,
+    retryRequestDelayMs,
+    getMessage,
+    sentMessagesCache,
+    shouldIgnoreJid
+  } = config;
   const sock = makeMessagesSocket(config);
   const {
     ev,
@@ -540,7 +546,13 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
     ids: string[],
     retryNode: BinaryNode
   ) => {
-    const msgs = await Promise.all(ids.map(id => getMessage({ ...key, id })));
+    const msgs = await Promise.all(
+      ids.map(
+        id =>
+          (sentMessagesCache?.get(id) as proto.IMessage | undefined) ||
+          getMessage({ ...key, id })
+      )
+    );
     const remoteJid = key.remoteJid!;
     const participant = key.participant || remoteJid;
     // if it's the primary jid sending the request
@@ -574,6 +586,13 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
         }
 
         await relayMessage(key.remoteJid!, msg, msgRelayOpts);
+        logger.info(
+          {
+            jid: key.remoteJid,
+            id: ids[i]
+          },
+          "Received a retry request and sent message again"
+        );
       } else {
         logger.debug(
           { jid: key.remoteJid, id: ids[i] },
@@ -799,22 +818,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
           cleanMessage(msg, authState.creds.me!.id);
 
-          if (
-            msg.message?.protocolMessage?.type ===
-              proto.Message.ProtocolMessage.Type.SHARE_PHONE_NUMBER &&
-            node.attrs.sender_pn
-          ) {
-            ev.emit("chats.phoneNumberShare", {
-              lid: node.attrs.from,
-              jid: node.attrs.sender_pn
-            });
-          }
-
           await upsertMessage(msg, node.attrs.offline ? "append" : "notify");
         })
       ]);
-    } finally {
-      await sendMessageAck(node);
+    } catch (err) {
+      logger.error({ err, node }, "error in handling message");
     }
   };
 
