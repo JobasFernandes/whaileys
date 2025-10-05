@@ -302,24 +302,52 @@ export const fetchLatestBaileysVersion = async (
   }
 };
 
+const WA_WEB_SW_URL = "https://web.whatsapp.com/sw.js";
+const CLIENT_REVISION_REGEX = /\\"client_revision\\":\s*(\d+)/;
+
+type FetchWaWebVersionResult = {
+  version: WAVersion;
+  isLatest: boolean;
+  error?: unknown;
+};
+
 /**
  * A utility that fetches the latest web version of whatsapp.
  * Use to ensure your WA connection is always on the latest version
  */
 export const fetchLatestWaWebVersion = async (
-  options: AxiosRequestConfig<any>
-) => {
+  options: AxiosRequestConfig = {}
+): Promise<FetchWaWebVersionResult> => {
   try {
-    const result = await axios.get(
-      "https://web.whatsapp.com/check-update?version=1&platform=web",
-      {
-        ...options,
-        responseType: "json"
-      }
-    );
-    const version = result.data.currentVersion.split(".");
+    const headers = {
+      Accept: "text/javascript, application/javascript",
+      ...(options.headers ?? {})
+    };
+
+    const requestConfig: AxiosRequestConfig = {
+      ...options,
+      responseType: "text",
+      headers
+    };
+
+    const { data } = await axios.get<string>(WA_WEB_SW_URL, requestConfig);
+
+    const match = data.match(CLIENT_REVISION_REGEX);
+
+    if (!match?.[1]) {
+      return {
+        version: baileysVersion as WAVersion,
+        isLatest: false,
+        error: {
+          message: "Could not find client revision in the fetched content"
+        }
+      };
+    }
+
+    const clientRevision = Number.parseInt(match[1], 10);
+
     return {
-      version: [+version[0], +version[1], +version[2]] as WAVersion,
+      version: [2, 3000, clientRevision] as WAVersion,
       isLatest: true
     };
   } catch (error) {
