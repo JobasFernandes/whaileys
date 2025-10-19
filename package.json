@@ -42,6 +42,7 @@
     "lodash": "^4.17.21",
     "music-metadata": "^7.12.3",
     "node-cache": "^5.1.2",
+    "ogg-opus-decoder": "^1.7.1",
     "pino": "^7.0.0",
     "protobufjs": "^7.2.4",
     "protobufjs-cli": "^1.1.3",

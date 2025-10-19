@@ -224,6 +224,75 @@ export async function getAudioDuration(buffer: Buffer | string | Readable) {
   return metadata.format.duration;
 }
 
+export async function getAudioWaveform(
+  buffer: Buffer | string | Readable,
+  logger?: Logger
+): Promise<Uint8Array | undefined> {
+  let decoder: import("ogg-opus-decoder").OggOpusDecoder | undefined;
+  try {
+    const { OggOpusDecoder } = (await import(
+      "ogg-opus-decoder"
+    )) as typeof import("ogg-opus-decoder");
+
+    let oggData: Uint8Array;
+    if (Buffer.isBuffer(buffer)) {
+      oggData = new Uint8Array(buffer);
+    } else if (typeof buffer === "string") {
+      const fileData = await fs.readFile(buffer);
+      oggData = new Uint8Array(fileData);
+    } else {
+      const audioBuffer = await toBuffer(buffer);
+      oggData = new Uint8Array(audioBuffer);
+    }
+
+    decoder = new OggOpusDecoder();
+    await decoder.ready;
+    const { channelData } = await decoder.decodeFile(oggData);
+
+    if (!channelData?.length || !channelData[0]?.length) {
+      return undefined;
+    }
+
+    const pcmChannel = channelData[0];
+    const samples = 64;
+    const totalSamples = pcmChannel.length;
+    const blockSize = Math.max(1, Math.floor(totalSamples / samples));
+    const averaged: number[] = [];
+
+    for (let i = 0; i < samples; i++) {
+      const blockStart = blockSize * i;
+      let sum = 0;
+      for (let j = 0; j < blockSize && blockStart + j < totalSamples; j++) {
+        sum += Math.abs(pcmChannel[blockStart + j]);
+      }
+      averaged.push(sum / blockSize);
+    }
+
+    let maxValue = 0;
+    for (const value of averaged) {
+      if (value > maxValue) {
+        maxValue = value;
+      }
+    }
+    if (maxValue === 0) {
+      return new Uint8Array(samples);
+    }
+
+    return new Uint8Array(
+      averaged.map(value => Math.min(100, Math.round((value / maxValue) * 100)))
+    );
+  } catch (error) {
+    logger?.debug({ err: error }, "failed to generate waveform");
+    return undefined;
+  } finally {
+    try {
+      decoder?.free();
+    } catch (freeError) {
+      logger?.trace?.({ err: freeError }, "failed to free ogg decoder");
+    }
+  }
+}
+
 export const toReadable = (buffer: Buffer) => {
   const readable = new Readable({ read: () => {} });
   readable.push(buffer);
