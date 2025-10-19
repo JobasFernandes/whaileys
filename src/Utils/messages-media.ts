@@ -253,33 +253,36 @@ export async function getAudioWaveform(
       return undefined;
     }
 
-    const pcmChannel = channelData[0];
     const samples = 64;
-    const totalSamples = pcmChannel.length;
-    const blockSize = Math.max(1, Math.floor(totalSamples / samples));
-    const averaged: number[] = [];
+    const pcm = channelData[0];
+    const blockSize = Math.max(1, Math.floor(pcm.length / samples));
 
-    for (let i = 0; i < samples; i++) {
-      const blockStart = blockSize * i;
-      let sum = 0;
-      for (let j = 0; j < blockSize && blockStart + j < totalSamples; j++) {
-        sum += Math.abs(pcmChannel[blockStart + j]);
+    const peaks = Array.from({ length: samples }, (_, i) => {
+      let max = 0;
+      for (let j = 0; j < blockSize && i * blockSize + j < pcm.length; j++) {
+        const abs = Math.abs(pcm[i * blockSize + j]);
+        if (abs > max) {
+          max = abs;
+        }
       }
-      averaged.push(sum / blockSize);
-    }
+      return max;
+    });
 
-    let maxValue = 0;
-    for (const value of averaged) {
-      if (value > maxValue) {
-        maxValue = value;
-      }
-    }
-    if (maxValue === 0) {
+    const globalMax = Math.max(...peaks);
+
+    if (globalMax === 0) {
+      decoder.free();
       return new Uint8Array(samples);
     }
 
+    decoder.free();
+
     return new Uint8Array(
-      averaged.map(value => Math.min(100, Math.round((value / maxValue) * 100)))
+      peaks.map(peak => {
+        const normalized = peak / globalMax;
+        const compressed = Math.pow(normalized, 0.6);
+        return Math.min(100, Math.max(1, Math.round(compressed * 100)));
+      })
     );
   } catch (error) {
     logger?.debug({ err: error }, "failed to generate waveform");
