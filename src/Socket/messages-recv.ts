@@ -225,7 +225,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
       await sendNode(receipt);
 
-      logger.info({ msgAttrs: node.attrs, retryCount }, "sent retry receipt");
+      logger.debug({ msgAttrs: node.attrs, retryCount }, "sent retry receipt");
     });
   };
 
@@ -586,7 +586,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
         }
 
         await relayMessage(key.remoteJid!, msg, msgRelayOpts);
-        logger.info(
+        logger.debug(
           {
             jid: key.remoteJid,
             id: ids[i]
@@ -766,7 +766,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
           // message failed to decrypt
           if (
             msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT &&
-            !msg.key.isViewOnce
+            category !== "peer"
           ) {
             logger.debug(
               { key: msg.key, params: msg.messageStubParameters },
