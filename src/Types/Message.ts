@@ -149,8 +149,8 @@ export type AnyMediaMessageContent = (
       ptt?: boolean;
       /** optionally tell the duration of the audio */
       seconds?: number;
-      /** waveform data as generated for voice notes */
-      waveform?: Uint8Array;
+      /** waveform data as generated for voice notes, pass null to disable */
+      waveform?: Uint8Array | null;
     }
   | ({
       sticker: WAMediaUpload;

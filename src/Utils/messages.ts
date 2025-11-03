@@ -52,7 +52,7 @@ type MediaUploadData = {
   mimetype?: string;
   width?: number;
   height?: number;
-  waveform?: Uint8Array;
+  waveform?: Uint8Array | null;
 };
 
 const MIMETYPE_MAP: { [T in MediaType]?: string } = {
@@ -156,7 +156,9 @@ export const prepareWAMessageMedia = async (
   const requiresDurationComputation =
     mediaType === "audio" && typeof uploadData.seconds === "undefined";
   const requiresWaveformProcessing =
-    mediaType === "audio" && uploadData.ptt === true && !uploadData.waveform;
+    mediaType === "audio" &&
+    uploadData.ptt === true &&
+    uploadData.waveform === undefined;
 
   const {
     mediaKey,
@@ -192,6 +194,7 @@ export const prepareWAMessageMedia = async (
       logger?.debug("computed audio waveform");
     }
   }
+  console.log("🚀 ~ requiresWaveformProcessing:", requiresWaveformProcessing);
 
   await fs
     .unlink(encFilePath)
