@@ -10,7 +10,9 @@ import {
   isJidNewsletter,
   isJidStatusBroadcast,
   isJidUser,
-  isLidUser
+  isLidUser,
+  jidDecode,
+  jidEncode
 } from "../WABinary";
 import { unpadRandomMax16 } from "./generics";
 import {
@@ -38,10 +40,13 @@ export const decodeMessageStanza = (
   let chatId: string;
   let author: string;
 
-  const senderPn = isJidUser(stanza.attrs.from)
+  const meLidUser = jidDecode(auth.creds.me!.lid)?.user!;
+
+  const senderPn = stanza.attrs.sender_lid
     ? stanza.attrs.from
     : stanza.attrs.sender_pn;
-  const senderLid = isLidUser(stanza.attrs.from)
+
+  const senderLid = stanza.attrs.sender_pn
     ? stanza.attrs.from
     : stanza.attrs.sender_lid;
 
@@ -53,10 +58,28 @@ export const decodeMessageStanza = (
     ? stanza.attrs.participant
     : stanza.attrs.participant_lid;
 
+  const isGroup = isJidGroup(stanza.attrs.from);
+
+  const fromLidUser = jidDecode(senderLid)?.user;
+  const fromDevice = jidDecode(stanza.attrs.from)?.device;
+
+  const participantLidUser = jidDecode(participantLid)?.user;
+  const participantDevice = jidDecode(stanza.attrs.participant)?.device;
+
+  const participantFullLid = participantLidUser
+    ? jidEncode(participantLidUser, "lid", participantDevice)
+    : undefined;
+
+  const fromFullLid =
+    !isGroup && fromLidUser
+      ? jidEncode(fromLidUser, "lid", fromDevice)
+      : undefined;
+
   const msgId = stanza.attrs.id;
-  const from = senderPn || stanza.attrs.from;
-  const participant: string | undefined = stanza.attrs.participant;
-  const recipient: string | undefined = stanza.attrs.recipient;
+  const from = fromFullLid || stanza.attrs.from;
+  const participant = participantFullLid || stanza.attrs.participant;
+  const recipient = stanza.attrs.recipient;
+  const recipientLid = stanza.attrs.peer_recipient_lid;
 
   const isMe = (jid: string) => areJidsSameUser(jid, auth.creds.me!.id);
   const isMeLid = (jid: string) => areJidsSameUser(jid, auth.creds.me!.lid);
@@ -75,7 +98,7 @@ export const decodeMessageStanza = (
     }
 
     msgType = "chat";
-    author = from;
+    author = isMe(from) ? jidEncode(meLidUser, "lid", fromDevice) : from;
   } else if (isJidGroup(from)) {
     if (!participant) {
       throw new Boom("No participant in group message");
@@ -121,7 +144,8 @@ export const decodeMessageStanza = (
     senderPn,
     participant,
     participantPn,
-    participantLid
+    participantLid,
+    recipientLid
   };
 
   const fullMessage: WAMessage = {
