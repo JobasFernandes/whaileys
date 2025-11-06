@@ -559,16 +559,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
     // just re-send the message to everyone
     // prevents the first message decryption failure
     const sendToAll = !jidDecode(participant)?.device;
-    await assertSessions([participant], true);
-
-    if (isJidGroup(remoteJid)) {
-      await authState.keys.set({ "sender-key-memory": { [remoteJid]: null } });
-    }
-
-    logger.debug(
-      { participant, sendToAll },
-      "forced new session for retry recp"
-    );
 
     for (let i = 0; i < msgs.length; i++) {
       const msg = msgs[i];
