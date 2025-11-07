@@ -59,6 +59,8 @@ export type SocketConfig = {
   sentMessagesCache?: NodeCache;
   /** marks the client as online whenever the socket successfully connects */
   markOnlineOnConnect: boolean;
+  /** country code for the primary account */
+  countryCode: string;
   /**
    * map to store the retry counts for failed messages;
    * used to determine whether to retry a message or not */

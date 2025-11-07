@@ -60,6 +60,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
   fireInitQueries: true,
   auth: undefined as any,
   markOnlineOnConnect: true,
+  countryCode: "US",
   syncFullHistory: false,
   shouldSyncHistoryMessage: () => true,
   shouldIgnoreJid: () => false,
