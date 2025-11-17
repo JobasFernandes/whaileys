@@ -718,12 +718,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
         logger.debug({ jid }, "adding device identity");
       }
 
-      const contactTcToken =
+      const contactTcTokenData =
         !isGroup && !isRetryResend && !isStatus
           ? await authState.keys.get("contacts-tc-token", [destinationJid])
           : {};
 
-      const tcTokenBuffer = contactTcToken[destinationJid]?.token;
+      const tcTokenBuffer = contactTcTokenData[destinationJid]?.token;
 
       if (tcTokenBuffer) {
         (stanza.content as BinaryNode[]).push({
