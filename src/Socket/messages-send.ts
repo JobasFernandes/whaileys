@@ -555,7 +555,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
       } else if (!isRetryResend) {
         const { user } = jidDecode(destinationJid)!;
         const meUser = jidDecode(meId)?.user;
-        const isMe = areJidsSameUser(user, meUser);
 
         const encodedMeMsg = encodeWAMessage({
           deviceSentMessage: {
@@ -564,8 +563,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
           }
         });
 
-        if (additionalAttributes?.["category"] === "peer" && isMe) {
-          devices.push({ user: meUser! });
+        if (additionalAttributes?.["category"] === "peer" && user === meUser) {
+          devices.push({ user: meUser });
         } else {
           const additionalDevices = await getUSyncDevices(
             [meId, jid],
