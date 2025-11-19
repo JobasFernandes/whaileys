@@ -123,7 +123,11 @@ export const generateRegistrationNode = (
       supportRecentSyncChunkMessageCountTuning: true,
       supportHostedGroupMsg: true,
       supportFbidBotChatHistory: true,
-      supportMessageAssociation: true
+      supportMessageAssociation: true,
+      supportAddOnHistorySyncMigration: undefined,
+      supportGroupHistory: false,
+      onDemandReady: undefined,
+      supportGuestChat: undefined
     },
     version: {
       primary: +(browserVersion[0] || 0),
