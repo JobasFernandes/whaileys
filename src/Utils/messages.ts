@@ -194,7 +194,6 @@ export const prepareWAMessageMedia = async (
       logger?.debug("computed audio waveform");
     }
   }
-  console.log("🚀 ~ requiresWaveformProcessing:", requiresWaveformProcessing);
 
   await fs
     .unlink(encFilePath)

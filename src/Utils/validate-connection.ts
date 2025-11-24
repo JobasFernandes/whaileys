@@ -83,7 +83,7 @@ export const generateLoginNode = (
     passive: true,
     pull: true,
     username: +user,
-    device,
+    device: device,
     lidDbMigrated: false
   };
   return proto.ClientPayload.fromObject(payload);
@@ -114,8 +114,9 @@ export const generateRegistrationNode = (
     platformType: getPlatformType(config.browser[1]),
     requireFullSync: config.syncFullHistory,
     historySyncConfig: {
-      storageQuotaMb: 569150,
-      inlineInitialPayloadInE2EeMsg: false,
+      storageQuotaMb: 10240,
+      inlineInitialPayloadInE2EeMsg: true,
+      recentSyncDaysLimit: undefined,
       supportCallLogHistory: false,
       supportBotUserAgentChatHistory: true,
       supportCagReactionsAndPolls: true,
@@ -123,7 +124,11 @@ export const generateRegistrationNode = (
       supportRecentSyncChunkMessageCountTuning: true,
       supportHostedGroupMsg: true,
       supportFbidBotChatHistory: true,
-      supportMessageAssociation: true
+      supportMessageAssociation: true,
+      supportAddOnHistorySyncMigration: undefined,
+      supportGroupHistory: false,
+      onDemandReady: undefined,
+      supportGuestChat: undefined
     },
     version: {
       primary: +(browserVersion[0] || 0),
